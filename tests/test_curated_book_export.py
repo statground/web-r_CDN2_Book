@@ -82,6 +82,13 @@ class CuratedBookTests(unittest.TestCase):
         raw, _ = curated.build_artifact(books, info)
         self.assertNotIn(b"shop.example", raw)
         self.assertEqual(len(json.loads(raw)["items"]), 8)
+        cover_sub_books = [dict(book, sub=curated.COVER_BY_SUB[book["sub"]]) for book in books]
+        cover_sub_raw, _ = curated.build_artifact(cover_sub_books, info)
+        self.assertEqual(cover_sub_raw, raw)
+        books[0]["sub"] = "008"
+        with self.assertRaisesRegex(ExportError, "source sub differs"):
+            curated.build_artifact(books, info)
+        books[0]["sub"] = "001"
         books[0]["title"] = "다른 책"
         with self.assertRaisesRegex(ExportError, "identity differs"):
             curated.build_artifact(books, info)
@@ -92,6 +99,29 @@ class CuratedBookTests(unittest.TestCase):
         books[0]["cover_url"] = "https://shop.example/book.jpg"
         with self.assertRaisesRegex(ExportError, "source cover differs"):
             curated.build_artifact(books, info)
+
+    def test_current_artifact_rebuilds_from_legacy_cover_sub_source(self):
+        original = (ROOT / curated.ARTIFACT).read_bytes()
+        books = []
+        info = []
+        for item in json.loads(original)["items"]:
+            data = item["data"]
+            cover = data["cover_url"].rsplit("/", 1)[-1]
+            books.append({
+                "book_uuid": data["book_uuid"], "sub": cover[5:8],
+                "title": data["title"], "publisher": data["publisher"],
+                "published_at": data["published_at"],
+                "cover_url": curated.OLD_COVER_ROOT + cover,
+                "isbn": data["isbn"], "page_cnt": data["page_cnt"], "size": data["size"],
+            })
+            info.append({
+                "book_uuid": data["book_uuid"], "info_uuid": data["book_uuid"],
+                "introduction": data["introduction"], "contents": data["contents"],
+                "publisher_review": data["publisher_review"], "updated_at": "",
+            })
+        rebuilt, manifest = curated.build_artifact(books, info)
+        self.assertEqual(rebuilt, original)
+        self.assertEqual(manifest, (ROOT / curated.MANIFEST).read_bytes())
 
     def test_description_export_removes_nested_markup_and_encoded_links(self):
         source = (

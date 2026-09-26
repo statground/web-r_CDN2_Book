@@ -38,6 +38,7 @@ COVER_BY_SUB = {
     "001": "002", "002": "001", "003": "003", "004": "007",
     "005": "006", "006": "008", "007": "005", "008": "004",
 }
+SUB_BY_UUID = {book_uuid: sub for sub, (book_uuid, _, _) in BOOK_IDENTITIES.items()}
 BOOK_FIELDS = frozenset(("book_uuid", "sub", "title", "publisher", "published_at", "cover_url", "isbn", "page_cnt", "size"))
 INFO_FIELDS = frozenset(("book_uuid", "introduction", "contents", "publisher_review", "info_uuid", "updated_at"))
 DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}\Z")
@@ -66,20 +67,25 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
 def build_artifact(books: list[dict[str, object]], info: list[dict[str, object]]) -> tuple[bytes, bytes]:
     if len(books) != 8 or len(info) != 8:
         raise ExportError("curated Book source count differs")
-    by_sub: dict[str, dict[str, object]] = {}
+    by_uuid_book: dict[str, dict[str, object]] = {}
     for row in books:
         if set(row) != BOOK_FIELDS:
             raise ExportError("curated Book source fields differ")
-        sub = row["sub"]
-        if not isinstance(sub, str) or sub not in BOOK_IDENTITIES or sub in by_sub:
-            raise ExportError("curated Book sub differs")
-        book_uuid, isbn, title = BOOK_IDENTITIES[sub]
-        if (row["book_uuid"], row["isbn"], row["title"]) != (book_uuid, isbn, title):
+        book_uuid = row["book_uuid"]
+        if not isinstance(book_uuid, str) or book_uuid not in SUB_BY_UUID or book_uuid in by_uuid_book:
+            raise ExportError("curated Book source UUID differs")
+        sub = SUB_BY_UUID[book_uuid]
+        _, isbn, title = BOOK_IDENTITIES[sub]
+        if (row["isbn"], row["title"]) != (isbn, title):
             raise ExportError("curated Book identity differs")
+        # Historical source exports have used the cover index in this field.
+        # Neither form may override the verified public route of this UUID.
+        if row["sub"] not in (sub, COVER_BY_SUB[sub]):
+            raise ExportError("curated Book source sub differs")
         if row["cover_url"] != OLD_COVER_ROOT + f"book_{COVER_BY_SUB[sub]}.jpg":
             raise ExportError("curated Book source cover differs")
-        by_sub[sub] = row
-    if set(by_sub) != set(BOOK_IDENTITIES):
+        by_uuid_book[book_uuid] = row
+    if set(by_uuid_book) != set(SUB_BY_UUID):
         raise ExportError("curated Book identities are incomplete")
 
     by_uuid: dict[str, dict[str, object]] = {}
@@ -100,7 +106,7 @@ def build_artifact(books: list[dict[str, object]], info: list[dict[str, object]]
 
     items = []
     for sub in DISPLAY_ORDER:
-        book = by_sub[sub]
+        book = by_uuid_book[BOOK_IDENTITIES[sub][0]]
         detail = by_uuid[str(book["book_uuid"])]
         published_at = book["published_at"]
         page_cnt = book["page_cnt"]
