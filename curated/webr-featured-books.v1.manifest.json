@@ -1,1 +1,1 @@
-{"schema":"webr.book.curated-metadata-manifest.v1","artifact":"curated/webr-featured-books.v1.json","count":8,"sha256":"522e41528fcc0c56e6aa2c82cfe9a4abddf313459a69449f2306d90b786101ba","cover_commit_sha":"3a26bbf452f0bd4a0c2af9012a974d6536f90a11","requires_current_policy_check":true}
+{"schema":"webr.book.curated-metadata-manifest.v1","artifact":"curated/webr-featured-books.v1.json","count":8,"sha256":"e26051470e4296004211a4353e80d46b66b3df7133310831eb81e36bb67649fb","cover_commit_sha":"3a26bbf452f0bd4a0c2af9012a974d6536f90a11","requires_current_policy_check":true}

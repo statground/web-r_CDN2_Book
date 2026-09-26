@@ -21,16 +21,22 @@ MANIFEST = Path("curated/webr-featured-books.v1.manifest.json")
 COVER_COMMIT = "3a26bbf452f0bd4a0c2af9012a974d6536f90a11"
 COVER_ROOT = f"https://cdn.jsdelivr.net/gh/statground/web-r_CDN2@{COVER_COMMIT}/images/book/"
 OLD_COVER_ROOT = "https://cdn.jsdelivr.net/gh/statground/web-r_CDN/images/book/"
-DISPLAY_ORDER = ("008", "004", "003", "006", "007", "005", "001", "002")
+# The route sub is the original public /book/<sub>/ identity. It is unrelated
+# to the cover filename. Keep the eight cards in the original visual order.
+DISPLAY_ORDER = ("006", "008", "003", "005", "004", "007", "002", "001")
 BOOK_IDENTITIES = {
-    "001": ("35a965ac-ff31-438e-9d60-3cdc0868acb3", "9788955661798", "의학논문 작성을 위한 R통계와 그래프"),
-    "002": ("9e13eb99-605a-4e06-8f16-261fb86569f8", "9788999719394", "R을 이용한 조건부과정분석"),
+    "001": ("9e13eb99-605a-4e06-8f16-261fb86569f8", "9788999719394", "R을 이용한 조건부과정분석"),
+    "002": ("35a965ac-ff31-438e-9d60-3cdc0868acb3", "9788955661798", "의학논문 작성을 위한 R통계와 그래프"),
     "003": ("8dc1bf4b-0187-4233-829b-c12e3b4e15e4", "9788955661859", "웹에서 클릭만으로 하는 R통계분석"),
-    "004": ("bf95f0ea-5cd4-45bf-959c-a56d66889567", "9783319530185", "Learning ggplot2 Using Shiny App"),
-    "005": ("6b76d358-6b56-4a65-8de3-e27cf0df2254", "", "일반화가법모형 소개"),
-    "006": ("f4bf3a41-4d82-42d6-a928-8a24c1076759", "", "밑바닥부터 시작하는 ROC 커브 분석"),
-    "007": ("9128b66f-3156-4e95-833e-d4086952b149", "", "웹R을 이용한 통계분석"),
-    "008": ("cc3a176e-8f57-4245-ad4c-767582c46e41", "9788955662948", "의료인을 위한 R 생존분석"),
+    "004": ("9128b66f-3156-4e95-833e-d4086952b149", "", "웹R을 이용한 통계분석"),
+    "005": ("f4bf3a41-4d82-42d6-a928-8a24c1076759", "", "밑바닥부터 시작하는 ROC 커브 분석"),
+    "006": ("cc3a176e-8f57-4245-ad4c-767582c46e41", "9788955662948", "의료인을 위한 R 생존분석"),
+    "007": ("6b76d358-6b56-4a65-8de3-e27cf0df2254", "", "일반화가법모형 소개"),
+    "008": ("bf95f0ea-5cd4-45bf-959c-a56d66889567", "9783319530185", "Learning ggplot2 Using Shiny App"),
+}
+COVER_BY_SUB = {
+    "001": "002", "002": "001", "003": "003", "004": "007",
+    "005": "006", "006": "008", "007": "005", "008": "004",
 }
 BOOK_FIELDS = frozenset(("book_uuid", "sub", "title", "publisher", "published_at", "cover_url", "isbn", "page_cnt", "size"))
 INFO_FIELDS = frozenset(("book_uuid", "introduction", "contents", "publisher_review", "info_uuid", "updated_at"))
@@ -70,7 +76,7 @@ def build_artifact(books: list[dict[str, object]], info: list[dict[str, object]]
         book_uuid, isbn, title = BOOK_IDENTITIES[sub]
         if (row["book_uuid"], row["isbn"], row["title"]) != (book_uuid, isbn, title):
             raise ExportError("curated Book identity differs")
-        if row["cover_url"] != OLD_COVER_ROOT + f"book_{sub}.jpg":
+        if row["cover_url"] != OLD_COVER_ROOT + f"book_{COVER_BY_SUB[sub]}.jpg":
             raise ExportError("curated Book source cover differs")
         by_sub[sub] = row
     if set(by_sub) != set(BOOK_IDENTITIES):
@@ -106,7 +112,7 @@ def build_artifact(books: list[dict[str, object]], info: list[dict[str, object]]
             "sub": sub,
             "isbn": book["isbn"],
             "title": _safe_text(book["title"], "title", 512, required=True),
-            "cover_url": COVER_ROOT + f"book_{sub}.jpg",
+            "cover_url": COVER_ROOT + f"book_{COVER_BY_SUB[sub]}.jpg",
             "publisher": _safe_text(book["publisher"], "publisher", 512),
             "published_at": published_at,
             "introduction": _description_without_urls(detail["introduction"]),
