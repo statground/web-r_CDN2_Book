@@ -12,6 +12,18 @@ from book_metadata_export import ExportError, URL_LIKE
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# Public deep links and displayed covers are separate identities. This fixed
+# fixture protects old /book/<sub>/ bookmarks and the original carousel art.
+LEGACY_CAROUSEL = (
+    ("006", "cc3a176e-8f57-4245-ad4c-767582c46e41", "book_008.jpg"),
+    ("008", "bf95f0ea-5cd4-45bf-959c-a56d66889567", "book_004.jpg"),
+    ("003", "8dc1bf4b-0187-4233-829b-c12e3b4e15e4", "book_003.jpg"),
+    ("005", "f4bf3a41-4d82-42d6-a928-8a24c1076759", "book_006.jpg"),
+    ("004", "9128b66f-3156-4e95-833e-d4086952b149", "book_007.jpg"),
+    ("007", "6b76d358-6b56-4a65-8de3-e27cf0df2254", "book_005.jpg"),
+    ("002", "35a965ac-ff31-438e-9d60-3cdc0868acb3", "book_001.jpg"),
+    ("001", "9e13eb99-605a-4e06-8f16-261fb86569f8", "book_002.jpg"),
+)
 
 
 class CuratedBookTests(unittest.TestCase):
@@ -30,13 +42,15 @@ class CuratedBookTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["service"], "webr")
         self.assertIs(payload["requires_current_policy_check"], True)
-        self.assertEqual(tuple(item["data"]["sub"] for item in payload["items"]), curated.DISPLAY_ORDER)
+        self.assertEqual(tuple(item["data"]["sub"] for item in payload["items"]),
+                         tuple(sub for sub, _, _ in LEGACY_CAROUSEL))
         self.assertEqual(len(payload["items"]), 8)
-        for item in payload["items"]:
+        for item, (expected_sub, expected_uuid, expected_cover) in zip(payload["items"], LEGACY_CAROUSEL):
             data = item["data"]
             sub = data["sub"]
+            self.assertEqual((sub, data["book_uuid"]), (expected_sub, expected_uuid))
             self.assertEqual((data["book_uuid"], data["isbn"], data["title"]), curated.BOOK_IDENTITIES[sub])
-            self.assertEqual(data["cover_url"], curated.COVER_ROOT + f"book_{sub}.jpg")
+            self.assertEqual(data["cover_url"], curated.COVER_ROOT + expected_cover)
             encoded = curated._json_bytes(data)
             self.assertIn(encoded, raw)
             self.assertEqual(item["metadata_sha256"], hashlib.sha256(encoded).hexdigest())
@@ -56,7 +70,7 @@ class CuratedBookTests(unittest.TestCase):
             books.append({
                 "book_uuid": book_uuid, "sub": sub, "title": title,
                 "publisher": "출판사", "published_at": "2020-01-01",
-                "cover_url": curated.OLD_COVER_ROOT + f"book_{sub}.jpg",
+                "cover_url": curated.OLD_COVER_ROOT + f"book_{curated.COVER_BY_SUB[sub]}.jpg",
                 "isbn": isbn, "page_cnt": 100, "size": "",
             })
             info.append({
@@ -68,13 +82,46 @@ class CuratedBookTests(unittest.TestCase):
         raw, _ = curated.build_artifact(books, info)
         self.assertNotIn(b"shop.example", raw)
         self.assertEqual(len(json.loads(raw)["items"]), 8)
+        cover_sub_books = [dict(book, sub=curated.COVER_BY_SUB[book["sub"]]) for book in books]
+        cover_sub_raw, _ = curated.build_artifact(cover_sub_books, info)
+        self.assertEqual(cover_sub_raw, raw)
+        books[0]["sub"] = "008"
+        with self.assertRaisesRegex(ExportError, "source sub differs"):
+            curated.build_artifact(books, info)
+        books[0]["sub"] = "001"
         books[0]["title"] = "다른 책"
         with self.assertRaisesRegex(ExportError, "identity differs"):
             curated.build_artifact(books, info)
         books[0]["title"] = curated.BOOK_IDENTITIES["001"][2]
+        books[0]["cover_url"] = curated.OLD_COVER_ROOT + "book_001.jpg"
+        with self.assertRaisesRegex(ExportError, "source cover differs"):
+            curated.build_artifact(books, info)
         books[0]["cover_url"] = "https://shop.example/book.jpg"
         with self.assertRaisesRegex(ExportError, "source cover differs"):
             curated.build_artifact(books, info)
+
+    def test_current_artifact_rebuilds_from_legacy_cover_sub_source(self):
+        original = (ROOT / curated.ARTIFACT).read_bytes()
+        books = []
+        info = []
+        for item in json.loads(original)["items"]:
+            data = item["data"]
+            cover = data["cover_url"].rsplit("/", 1)[-1]
+            books.append({
+                "book_uuid": data["book_uuid"], "sub": cover[5:8],
+                "title": data["title"], "publisher": data["publisher"],
+                "published_at": data["published_at"],
+                "cover_url": curated.OLD_COVER_ROOT + cover,
+                "isbn": data["isbn"], "page_cnt": data["page_cnt"], "size": data["size"],
+            })
+            info.append({
+                "book_uuid": data["book_uuid"], "info_uuid": data["book_uuid"],
+                "introduction": data["introduction"], "contents": data["contents"],
+                "publisher_review": data["publisher_review"], "updated_at": "",
+            })
+        rebuilt, manifest = curated.build_artifact(books, info)
+        self.assertEqual(rebuilt, original)
+        self.assertEqual(manifest, (ROOT / curated.MANIFEST).read_bytes())
 
     def test_description_export_removes_nested_markup_and_encoded_links(self):
         source = (
