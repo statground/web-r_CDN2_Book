@@ -273,9 +273,18 @@ def _valid_cert(raw: dict[str, object]) -> dict[str, object]:
 
 
 def _safe_text(value: object, label: str, maximum: int, *, required: bool = False) -> str:
-    if not isinstance(value, str) or len(value) > maximum or "\x00" in value or URL_LIKE.search(value):
-        raise ExportError("public Book " + label + " is invalid or contains a URL")
-    cleaned = value.strip()
+    if not isinstance(value, str) or len(value) > maximum or "\x00" in value:
+        raise ExportError("public Book " + label + " is invalid")
+    cleaned = value
+    for _ in range(5):
+        decoded = html.unescape(cleaned)
+        if decoded == cleaned:
+            break
+        cleaned = decoded
+    if (html.unescape(cleaned) != cleaned or len(cleaned) > maximum
+            or "<" in cleaned or ">" in cleaned or URL_LIKE.search(cleaned)):
+        raise ExportError("public Book " + label + " contains markup or a URL")
+    cleaned = cleaned.strip()
     if required and not cleaned:
         raise ExportError("public Book " + label + " is missing")
     if any(ord(char) < 32 and char not in "\t\n" for char in cleaned):

@@ -140,8 +140,16 @@ class BookMetadataExportTests(unittest.TestCase):
 
     def test_public_text_rejects_embedded_url_and_bootstrap_restrictions(self):
         reader = FakeReader(rows=[row("9781234567890", 17, title="Go to https://example.com/book")])
-        with self.assertRaisesRegex(export.ExportError, "contains a URL"):
+        with self.assertRaisesRegex(export.ExportError, "markup or a URL"):
             export.build_candidate(reader)
+        encoded = FakeReader(rows=[row("9781234567890", 17,
+                                       title="Go to https&#58;//example.com/book")])
+        with self.assertRaisesRegex(export.ExportError, "markup or a URL"):
+            export.build_candidate(encoded)
+        markup = FakeReader(rows=[row("9781234567890", 17,
+                                      title="R &lt;script&gt;alert(1)&lt;/script&gt;")])
+        with self.assertRaisesRegex(export.ExportError, "markup or a URL"):
+            export.build_candidate(markup)
         bootstrap = FakeReader(rows=[row("9788931457834", 17), row("9781234567890", 19)])
         payload, _ = export.build_candidate(bootstrap)
         self.assertNotIn("9788931457834", payload.decode())
